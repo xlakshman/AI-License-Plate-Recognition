@@ -1,0 +1,362 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard | AI License Plate Recognition System{% endblock %}
+{% block page_title %}Operational Dashboard{% endblock %}
+{% block breadcrumb %}Home / ANPR Intelligence Overview{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-0">
+    <!-- Top KPI Cards Row -->
+    <div class="row g-3 mb-4">
+        <!-- Total Vehicles Detected -->
+        <div class="col-xl-3 col-sm-6">
+            <div class="stat-card">
+                <div class="stat-card-icon stat-icon-cyan">
+                    <i class="fa-solid fa-car"></i>
+                </div>
+                <div class="stat-value" id="kpiTotal">{{ stats.total_detections }}</div>
+                <div class="stat-label">Total Vehicles Detected</div>
+                <div class="stat-trend text-info">
+                    <i class="fa-solid fa-shield-halved"></i>
+                    <span>Real-time YOLOv8 Inference</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Total Plates Recognized -->
+        <div class="col-xl-3 col-sm-6">
+            <div class="stat-card">
+                <div class="stat-card-icon stat-icon-green">
+                    <i class="fa-solid fa-id-card"></i>
+                </div>
+                <div class="stat-value" id="kpiPlates">{{ stats.unique_plates }}</div>
+                <div class="stat-label">Unique Number Plates</div>
+                <div class="stat-trend text-success">
+                    <i class="fa-solid fa-check-double"></i>
+                    <span>{{ stats.valid_rate }}% Valid Indian Formats</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Today's Detections -->
+        <div class="col-xl-3 col-sm-6">
+            <div class="stat-card">
+                <div class="stat-card-icon stat-icon-amber">
+                    <i class="fa-solid fa-calendar-day"></i>
+                </div>
+                <div class="stat-value" id="kpiToday">{{ stats.today_detections }}</div>
+                <div class="stat-label">Today's Detections</div>
+                <div class="stat-trend text-warning">
+                    <i class="fa-solid fa-bolt"></i>
+                    <span>Live Daily Throughput</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recognition Accuracy -->
+        <div class="col-xl-3 col-sm-6">
+            <div class="stat-card">
+                <div class="stat-card-icon stat-icon-purple">
+                    <i class="fa-solid fa-chart-line"></i>
+                </div>
+                <div class="stat-value" id="kpiConf">{{ stats.avg_confidence }}%</div>
+                <div class="stat-label">Average OCR Confidence</div>
+                <div class="stat-trend" style="color: #A78BFA;">
+                    <i class="fa-solid fa-microchip"></i>
+                    <span>EasyOCR + Bilateral CLAHE</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="row g-3 mb-4">
+        <!-- Daily Detection Analytics Chart -->
+        <div class="col-lg-8">
+            <div class="cyber-card h-100">
+                <div class="cyber-card-header">
+                    <h3 class="cyber-card-title">
+                        <i class="fa-solid fa-chart-area"></i>
+                        <span>Daily Detection Analytics (Past 7 Days)</span>
+                    </h3>
+                    <span class="badge" style="background: rgba(0, 240, 255, 0.15); color: #00F0FF; border: 1px solid rgba(0, 240, 255, 0.3);">
+                        <i class="fa-solid fa-arrow-trend-up me-1"></i>Traffic Trends
+                    </span>
+                </div>
+                <div style="position: relative; height: 280px; width: 100%;">
+                    <canvas id="dailyTrendChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Vehicle Category Distribution Chart -->
+        <div class="col-lg-4">
+            <div class="cyber-card h-100">
+                <div class="cyber-card-header">
+                    <h3 class="cyber-card-title">
+                        <i class="fa-solid fa-chart-pie"></i>
+                        <span>Vehicle Category Breakdown</span>
+                    </h3>
+                </div>
+                <div style="position: relative; height: 250px; width: 100%;">
+                    <canvas id="vehicleDoughnutChart"></canvas>
+                </div>
+                <div class="d-flex justify-content-around text-center mt-3 pt-2 border-top border-secondary border-opacity-25 small text-muted">
+                    <div><span class="d-inline-block rounded-circle me-1" style="width:8px;height:8px;background:#3B82F6;"></span>Cars</div>
+                    <div><span class="d-inline-block rounded-circle me-1" style="width:8px;height:8px;background:#F59E0B;"></span>Bikes</div>
+                    <div><span class="d-inline-block rounded-circle me-1" style="width:8px;height:8px;background:#10B981;"></span>Buses</div>
+                    <div><span class="d-inline-block rounded-circle me-1" style="width:8px;height:8px;background:#A855F7;"></span>Trucks</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Workflow Launcher & Recent Detections Row -->
+    <div class="row g-3 mb-4">
+        <!-- Quick Actions Banner -->
+        <div class="col-12">
+            <div class="cyber-card" style="background: linear-gradient(90deg, #131E3D 0%, #1A284D 100%); border-left: 4px solid #00F0FF;">
+                <div class="row align-items-center">
+                    <div class="col-md-8">
+                        <h4 class="text-white fw-bold mb-1">
+                            <i class="fa-solid fa-wand-magic-sparkles text-info me-2"></i>Automated License Plate Recognition Pipeline
+                        </h4>
+                        <p class="text-secondary mb-0 small">
+                            Upload a single vehicle image or traffic surveillance video stream for deep learning detection, OCR character extraction, and instant SQLite logging.
+                        </p>
+                    </div>
+                    <div class="col-md-4 text-md-end mt-3 mt-md-0">
+                        <a href="/image" class="btn-cyber me-2">
+                            <i class="fa-solid fa-camera"></i> Test Image
+                        </a>
+                        <a href="/video" class="btn-cyber-outline">
+                            <i class="fa-solid fa-video"></i> Test Video
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Detection History Table -->
+    <div class="row g-3">
+        <div class="col-12">
+            <div class="cyber-card">
+                <div class="cyber-card-header">
+                    <h3 class="cyber-card-title">
+                        <i class="fa-solid fa-clock-rotate-left"></i>
+                        <span>Recent Detection History</span>
+                    </h3>
+                    <a href="/history" class="btn-cyber-outline btn-sm">
+                        <span>View All Records</span>
+                        <i class="fa-solid fa-chevron-right ms-1"></i>
+                    </a>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="cyber-table">
+                        <thead>
+                            <tr>
+                                <th># ID</th>
+                                <th>Plate Crop</th>
+                                <th>Plate Number</th>
+                                <th>Vehicle Class</th>
+                                <th>State / Region</th>
+                                <th>OCR Confidence</th>
+                                <th>Source</th>
+                                <th>Date & Time</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% if recent %}
+                                {% for r in recent %}
+                                <tr>
+                                    <td><span class="text-muted">#{{ r.id }}</span></td>
+                                    <td>
+                                        {% if r.crop_path %}
+                                            <img src="/{{ r.crop_path }}" alt="Crop" class="crop-thumb" 
+                                                 onclick="viewImageModal('/{{ r.crop_path }}', 'Cropped Plate: {{ r.plate_number }}', 'Confidence: {{ (r.confidence * 100)|round(1) }}% | {{ r.state_name }}')">
+                                        {% else %}
+                                            <span class="badge bg-secondary bg-opacity-25 text-muted">No Crop</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="plate-badge">{{ r.plate_number }}</span>
+                                    </td>
+                                    <td>
+                                        {% set vlow = r.vehicle_type|lower %}
+                                        {% if 'motor' in vlow or 'bike' in vlow %}
+                                            <span class="vehicle-badge badge-bike"><i class="fa-solid fa-motorcycle"></i> Motorcycle</span>
+                                        {% elif 'bus' in vlow %}
+                                            <span class="vehicle-badge badge-bus"><i class="fa-solid fa-bus"></i> Bus</span>
+                                        {% elif 'truck' in vlow %}
+                                            <span class="vehicle-badge badge-truck"><i class="fa-solid fa-truck"></i> Truck</span>
+                                        {% else %}
+                                            <span class="vehicle-badge badge-car"><i class="fa-solid fa-car-side"></i> {{ r.vehicle_type }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="text-white">{{ r.state_name }}</span>
+                                        {% if r.state_code and r.state_code != 'UNKNOWN' %}
+                                            <small class="badge bg-dark border border-secondary text-info ms-1">{{ r.state_code }}</small>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <div class="confidence-bar">
+                                            <div class="confidence-fill" style="width: {{ (r.confidence * 100)|round(0) }}%;"></div>
+                                        </div>
+                                        <span class="fw-bold text-white small">{{ (r.confidence * 100)|round(1) }}%</span>
+                                    </td>
+                                    <td>
+                                        {% if r.source_type == 'video' %}
+                                            <span class="badge bg-purple bg-opacity-25 text-info border border-info border-opacity-25">
+                                                <i class="fa-solid fa-video me-1"></i>Video
+                                            </span>
+                                        {% else %}
+                                            <span class="badge bg-primary bg-opacity-25 text-primary border border-primary border-opacity-25">
+                                                <i class="fa-solid fa-image me-1"></i>Image
+                                            </span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="text-secondary small">{{ r.detection_date }} {{ r.detection_time }}</span>
+                                    </td>
+                                    <td>
+                                        {% if r.image_path %}
+                                            <button class="btn btn-sm btn-outline-info py-0 px-2" 
+                                                    onclick="viewImageModal('/{{ r.image_path }}', 'Full Annotated Detection #{{ r.id }}', '{{ r.plate_number }} &bull; {{ r.vehicle_type }}')">
+                                                <i class="fa-solid fa-expand"></i>
+                                            </button>
+                                        {% else %}
+                                            <span class="text-muted small">-</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            {% else %}
+                                <tr>
+                                    <td colspan="9" class="text-center py-4 text-muted">
+                                        <i class="fa-solid fa-folder-open fa-2x mb-2 d-block"></i>
+                                        No detection logs found. Upload an image or video to begin.
+                                    </td>
+                                </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    // Fetch stats and render live Chart.js charts
+    fetch('/api/stats')
+        .then(res => res.json())
+        .then(data => {
+            renderDailyChart(data.daily_analytics);
+            renderVehicleChart(data.vehicle_distribution);
+        })
+        .catch(err => console.error("Error loading stats:", err));
+
+    function renderDailyChart(dailyData) {
+        const ctx = document.getElementById('dailyTrendChart');
+        if (!ctx) return;
+
+        const labels = dailyData.map(d => d.label);
+        const counts = dailyData.map(d => d.count);
+
+        const gradient = ctx.getContext('2d').createLinearGradient(0, 0, 0, 260);
+        gradient.addColorStop(0, 'rgba(0, 240, 255, 0.45)');
+        gradient.addColorStop(1, 'rgba(0, 240, 255, 0.0)');
+
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Detections',
+                    data: counts,
+                    borderColor: '#00F0FF',
+                    borderWidth: 3,
+                    backgroundColor: gradient,
+                    fill: true,
+                    tension: 0.38,
+                    pointBackgroundColor: '#00F0FF',
+                    pointBorderColor: '#0B132B',
+                    pointBorderWidth: 2,
+                    pointRadius: 5,
+                    pointHoverRadius: 7
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: '#1C2541',
+                        titleColor: '#00F0FF',
+                        bodyColor: '#FFFFFF',
+                        borderColor: '#2A3B5C',
+                        borderWidth: 1,
+                        padding: 12
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                        ticks: { color: '#8292A8', font: { family: 'Plus Jakarta Sans' } }
+                    },
+                    y: {
+                        grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                        ticks: { color: '#8292A8', stepSize: 1, font: { family: 'Plus Jakarta Sans' } },
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+    }
+
+    function renderVehicleChart(dist) {
+        const ctx = document.getElementById('vehicleDoughnutChart');
+        if (!ctx) return;
+
+        const categories = ['Car', 'Motorcycle', 'Bus', 'Truck'];
+        const values = categories.map(c => dist[c] || 0);
+
+        new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: categories,
+                datasets: [{
+                    data: values,
+                    backgroundColor: ['#3B82F6', '#F59E0B', '#10B981', '#A855F7'],
+                    borderColor: '#1C2541',
+                    borderWidth: 3,
+                    hoverOffset: 6
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: '#1C2541',
+                        borderColor: '#2A3B5C',
+                        borderWidth: 1,
+                        padding: 10
+                    }
+                },
+                cutout: '72%'
+            }
+        });
+    }
+});
+</script>
+{% endblock %}

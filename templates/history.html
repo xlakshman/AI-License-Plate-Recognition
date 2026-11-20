@@ -1,0 +1,266 @@
+{% extends "base.html" %}
+
+{% block title %}Detection History | AI License Plate Recognition System{% endblock %}
+{% block page_title %}Detection History Logs{% endblock %}
+{% block breadcrumb %}Records / Persistent SQLite Database{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-0">
+    <!-- Filter & Action Card -->
+    <div class="cyber-card mb-4">
+        <div class="row g-3 align-items-end">
+            <!-- Search Input -->
+            <div class="col-lg-3 col-md-6">
+                <label class="form-label small text-secondary fw-semibold">Search Registration / State</label>
+                <div class="input-group">
+                    <span class="input-group-text border-0" style="background:#141B30; color:#8292A8;">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                    </span>
+                    <input type="text" id="searchInput" class="cyber-input border-start-0" placeholder="e.g. DL01, MH, Delhi...">
+                </div>
+            </div>
+
+            <!-- Vehicle Type Filter -->
+            <div class="col-lg-2 col-md-6">
+                <label class="form-label small text-secondary fw-semibold">Vehicle Category</label>
+                <select id="vehicleTypeFilter" class="cyber-input">
+                    <option value="all">All Vehicles</option>
+                    <option value="Car">Car</option>
+                    <option value="Motorcycle">Motorcycle</option>
+                    <option value="Bus">Bus</option>
+                    <option value="Truck">Truck</option>
+                </select>
+            </div>
+
+            <!-- Date From -->
+            <div class="col-lg-2 col-md-6">
+                <label class="form-label small text-secondary fw-semibold">From Date</label>
+                <input type="date" id="dateFromFilter" class="cyber-input">
+            </div>
+
+            <!-- Date To -->
+            <div class="col-lg-2 col-md-6">
+                <label class="form-label small text-secondary fw-semibold">To Date</label>
+                <input type="date" id="dateToFilter" class="cyber-input">
+            </div>
+
+            <!-- Buttons: Filter, Reset, Export -->
+            <div class="col-lg-3 col-md-12 text-lg-end">
+                <div class="d-flex gap-2 justify-content-lg-end">
+                    <button class="btn-cyber btn-sm" id="btnApplyFilter">
+                        <i class="fa-solid fa-filter"></i> Filter
+                    </button>
+                    <a href="/api/export/csv" class="btn-cyber-outline btn-sm">
+                        <i class="fa-solid fa-file-csv"></i> Export CSV
+                    </a>
+                    <button class="btn btn-outline-danger btn-sm" id="btnClearHistory" title="Clear all logs">
+                        <i class="fa-solid fa-trash-can"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Data Table Card -->
+    <div class="cyber-card">
+        <div class="cyber-card-header">
+            <h3 class="cyber-card-title">
+                <i class="fa-solid fa-database"></i>
+                <span>Database Records</span>
+            </h3>
+            <span class="text-info small fw-bold" id="totalRecordsBadge">Loading records...</span>
+        </div>
+
+        <div class="table-responsive">
+            <table class="cyber-table">
+                <thead>
+                    <tr>
+                        <th># ID</th>
+                        <th>Crop</th>
+                        <th>Plate Number</th>
+                        <th>Vehicle Type</th>
+                        <th>State / UT</th>
+                        <th>Format Standard</th>
+                        <th>Confidence</th>
+                        <th>Source</th>
+                        <th>Logged At</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="historyTableBody">
+                    <!-- Populated by JS -->
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination Controls -->
+        <div class="d-flex justify-content-between align-items-center mt-3 pt-3 border-top border-secondary border-opacity-25">
+            <span class="text-muted small" id="paginationInfo">Showing 0 of 0</span>
+            <div class="btn-group btn-group-sm">
+                <button class="btn btn-outline-secondary" id="btnPrevPage" disabled>
+                    <i class="fa-solid fa-chevron-left me-1"></i> Prev
+                </button>
+                <button class="btn btn-outline-secondary" id="btnNextPage" disabled>
+                    Next <i class="fa-solid fa-chevron-right ms-1"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    let currentPage = 1;
+    const limit = 12;
+
+    const tbody = document.getElementById('historyTableBody');
+    const totalBadge = document.getElementById('totalRecordsBadge');
+    const paginationInfo = document.getElementById('paginationInfo');
+    const btnPrev = document.getElementById('btnPrevPage');
+    const btnNext = document.getElementById('btnNextPage');
+
+    function loadRecords() {
+        const search = document.getElementById('searchInput').value.trim();
+        const vtype = document.getElementById('vehicleTypeFilter').value;
+        const dfrom = document.getElementById('dateFromFilter').value;
+        const dto = document.getElementById('dateToFilter').value;
+
+        const url = `/api/history?page=${currentPage}&limit=${limit}&search=${encodeURIComponent(search)}&vehicle_type=${encodeURIComponent(vtype)}&date_from=${dfrom}&date_to=${dto}`;
+
+        tbody.innerHTML = `<tr><td colspan="10" class="text-center py-4 text-muted"><div class="cyber-spinner mx-auto" style="width:36px;height:36px;"></div>Loading database records...</td></tr>`;
+
+        fetch(url)
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    renderTable(data);
+                }
+            })
+            .catch(err => console.error("Error loading history:", err));
+    }
+
+    function renderTable(data) {
+        tbody.innerHTML = '';
+        totalBadge.textContent = `${data.total} Total Records`;
+
+        if (!data.records || data.records.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="10" class="text-center py-4 text-muted"><i class="fa-solid fa-folder-open fa-2x mb-2 d-block"></i>No matching records found.</td></tr>`;
+            paginationInfo.textContent = `Showing 0 of 0`;
+            btnPrev.disabled = true;
+            btnNext.disabled = true;
+            return;
+        }
+
+        const startIdx = (data.page - 1) * limit + 1;
+        const endIdx = Math.min(data.page * limit, data.total);
+        paginationInfo.textContent = `Showing ${startIdx}-${endIdx} of ${data.total} records`;
+
+        btnPrev.disabled = (data.page <= 1);
+        btnNext.disabled = (data.page >= data.pages);
+
+        data.records.forEach(r => {
+            const confPercent = (r.confidence * 100).toFixed(1);
+            const cropHtml = r.crop_path ? 
+                `<img src="/${r.crop_path}" class="crop-thumb" onclick="viewImageModal('/${r.crop_path}', '${r.plate_number}')">` : 
+                `<span class="badge bg-secondary bg-opacity-25 text-muted">No crop</span>`;
+
+            let badgeClass = 'badge-car';
+            const vlow = (r.vehicle_type || '').toLowerCase();
+            if (vlow.includes('bike') || vlow.includes('motor')) badgeClass = 'badge-bike';
+            else if (vlow.includes('bus')) badgeClass = 'badge-bus';
+            else if (vlow.includes('truck')) badgeClass = 'badge-truck';
+
+            const row = `
+                <tr>
+                    <td><span class="text-muted small">#${r.id}</span></td>
+                    <td>${cropHtml}</td>
+                    <td><span class="plate-badge">${r.plate_number}</span></td>
+                    <td><span class="vehicle-badge ${badgeClass}">${r.vehicle_type}</span></td>
+                    <td>
+                        <span class="text-white">${r.state_name}</span>
+                        ${r.state_code ? `<small class="badge bg-dark border border-secondary text-info ms-1">${r.state_code}</small>` : ''}
+                    </td>
+                    <td><span class="small text-secondary">${r.format_type || 'HSRP'}</span></td>
+                    <td>
+                        <div class="confidence-bar">
+                            <div class="confidence-fill" style="width:${confPercent}%;"></div>
+                        </div>
+                        <span class="small text-white fw-bold">${confPercent}%</span>
+                    </td>
+                    <td>
+                        <span class="badge ${r.source_type === 'video' ? 'bg-purple bg-opacity-25 text-info border border-info border-opacity-25' : 'bg-primary bg-opacity-25 text-primary border border-primary border-opacity-25'}">
+                            ${r.source_type}
+                        </span>
+                    </td>
+                    <td><span class="small text-secondary">${r.detection_date} <small class="text-muted">${r.detection_time}</small></span></td>
+                    <td>
+                        <div class="btn-group btn-group-sm">
+                            ${r.image_path ? `
+                                <button class="btn btn-outline-info py-0 px-2" onclick="viewImageModal('/${r.image_path}', 'Full Frame #${r.id}', '${r.plate_number}')" title="Inspect Image">
+                                    <i class="fa-solid fa-expand"></i>
+                                </button>
+                            ` : ''}
+                            <button class="btn btn-outline-danger py-0 px-2" onclick="deleteRecord(${r.id})" title="Delete Record">
+                                <i class="fa-solid fa-trash-can"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+            `;
+            tbody.innerHTML += row;
+        });
+    }
+
+    // Filter and search listeners
+    document.getElementById('btnApplyFilter').addEventListener('click', () => {
+        currentPage = 1;
+        loadRecords();
+    });
+
+    document.getElementById('searchInput').addEventListener('keyup', (e) => {
+        if (e.key === 'Enter') {
+            currentPage = 1;
+            loadRecords();
+        }
+    });
+
+    btnPrev.addEventListener('click', () => {
+        if (currentPage > 1) {
+            currentPage--;
+            loadRecords();
+        }
+    });
+
+    btnNext.addEventListener('click', () => {
+        currentPage++;
+        loadRecords();
+    });
+
+    // Clear history
+    document.getElementById('btnClearHistory').addEventListener('click', () => {
+        if (confirm("Are you sure you want to clear all detection records from the SQLite database?")) {
+            fetch('/api/history/clear', { method: 'POST' })
+                .then(res => res.json())
+                .then(() => {
+                    currentPage = 1;
+                    loadRecords();
+                });
+        }
+    });
+
+    // Delete single record
+    window.deleteRecord = function(id) {
+        if (confirm(`Delete detection record #${id}?`)) {
+            fetch(`/api/history/${id}`, { method: 'DELETE' })
+                .then(res => res.json())
+                .then(() => loadRecords());
+        }
+    };
+
+    // Initial load
+    loadRecords();
+});
+</script>
+{% endblock %}

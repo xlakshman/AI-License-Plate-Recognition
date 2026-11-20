@@ -1,0 +1,425 @@
+{% extends "base.html" %}
+
+{% block title %}Image Detection | AI License Plate Recognition System{% endblock %}
+{% block page_title %}Image Detection Workspace{% endblock %}
+{% block breadcrumb %}Inference / Image ANPR Pipeline{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-0">
+    <!-- Top Configuration & Upload Grid -->
+    <div class="row g-3 mb-4">
+        <!-- Left: Upload & Sample Picker -->
+        <div class="col-lg-7">
+            <div class="cyber-card h-100 position-relative">
+                <div class="cyber-card-header">
+                    <h3 class="cyber-card-title">
+                        <i class="fa-solid fa-cloud-arrow-up"></i>
+                        <span>Input Vehicle Image</span>
+                    </h3>
+                    <span class="badge bg-secondary bg-opacity-25 text-info border border-info border-opacity-25">
+                        JPG, JPEG, PNG
+                    </span>
+                </div>
+
+                <!-- Dropzone -->
+                <div class="dropzone-container" id="dropzone">
+                    <input type="file" id="imageInput" accept=".jpg,.jpeg,.png" style="display:none;">
+                    <i class="fa-solid fa-cloud-arrow-up dropzone-icon"></i>
+                    <h5 class="text-white mb-1">Drag & Drop Vehicle Image Here</h5>
+                    <p class="text-muted small mb-3">or click to browse from your local device</p>
+                    <button type="button" class="btn-cyber btn-sm" onclick="document.getElementById('imageInput').click()">
+                        <i class="fa-solid fa-folder-open"></i> Browse File
+                    </button>
+                    <div id="selectedFileName" class="mt-2 text-info small fw-bold"></div>
+                </div>
+
+                <!-- Sample Selector -->
+                {% if samples %}
+                <div class="mt-4 pt-3 border-top border-secondary border-opacity-25">
+                    <label class="form-label small text-muted text-uppercase fw-bold mb-2">
+                        <i class="fa-solid fa-images me-1 text-info"></i> Or Select a College Demonstration Sample:
+                    </label>
+                    <div class="d-flex flex-wrap gap-1" id="samplePillContainer">
+                        {% for s in samples %}
+                        <div class="sample-pill" data-sample="{{ s }}">
+                            <i class="fa-solid fa-car-side text-info"></i>
+                            <span>{{ s.replace('.jpg', '').replace('_', ' ')|title }}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Right: Detection Settings & Execution -->
+        <div class="col-lg-5">
+            <div class="cyber-card h-100 d-flex flex-column justify-content-between">
+                <div>
+                    <div class="cyber-card-header">
+                        <h3 class="cyber-card-title">
+                            <i class="fa-solid fa-sliders"></i>
+                            <span>Detection Parameters</span>
+                        </h3>
+                    </div>
+
+                    <!-- Method Selection -->
+                    <div class="mb-3">
+                        <label class="form-label small text-secondary fw-semibold">Detection Engine Model</label>
+                        <select class="cyber-input" id="detectionMethod">
+                            <option value="auto" selected>Auto Hybrid (YOLOv8 + OpenCV Fallback)</option>
+                            <option value="yolo">Dedicated YOLOv8 Neural Network</option>
+                            <option value="opencv">Traditional OpenCV (Contours & Bilateral)</option>
+                        </select>
+                        <small class="text-muted d-block mt-1">YOLOv8 runs deep learning inference; OpenCV provides traditional CV comparison for viva.</small>
+                    </div>
+
+                    <!-- Confidence Slider -->
+                    <div class="mb-4">
+                        <div class="d-flex justify-content-between mb-1">
+                            <label class="form-label small text-secondary fw-semibold">Confidence Threshold</label>
+                            <span class="text-info fw-bold small" id="confVal">25%</span>
+                        </div>
+                        <input type="range" class="form-range" id="confSlider" min="10" max="90" value="25" step="5">
+                        <div class="d-flex justify-content-between text-muted" style="font-size:0.7rem;">
+                            <span>10% (Sensitive)</span>
+                            <span>50%</span>
+                            <span>90% (Strict)</span>
+                        </div>
+                    </div>
+
+                    <!-- AI Pipeline Visual Tracker -->
+                    <div class="p-3 rounded mb-3" style="background:#141C33; border:1px solid #2A3B5C;">
+                        <div class="small fw-bold text-info mb-2 text-uppercase">
+                            <i class="fa-solid fa-microchip me-1"></i> Inference Pipeline
+                        </div>
+                        <div class="d-flex justify-content-between small text-muted text-center" style="font-size:0.72rem;">
+                            <div><i class="fa-solid fa-car d-block text-secondary mb-1"></i>Vehicle</div>
+                            <i class="fa-solid fa-arrow-right text-muted mt-2"></i>
+                            <div><i class="fa-solid fa-crop-simple d-block text-secondary mb-1"></i>Plate Crop</div>
+                            <i class="fa-solid fa-arrow-right text-muted mt-2"></i>
+                            <div><i class="fa-solid fa-wand-magic-sparkles d-block text-secondary mb-1"></i>CLAHE</div>
+                            <i class="fa-solid fa-arrow-right text-muted mt-2"></i>
+                            <div><i class="fa-solid fa-font d-block text-secondary mb-1"></i>EasyOCR</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Process Button -->
+                <button type="button" class="btn-cyber w-100 py-3 justify-content-center mt-3" id="btnProcess">
+                    <i class="fa-solid fa-play"></i>
+                    <span>Execute ANPR Recognition</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Processing Overlay (Hidden by default) -->
+    <div id="processingCard" class="cyber-card text-center py-5 d-none mb-4">
+        <div class="cyber-spinner mx-auto"></div>
+        <h4 class="text-white fw-bold mb-1">Analyzing Vehicle & Number Plate...</h4>
+        <p class="text-secondary small mb-3" id="processingStatus">Running YOLOv8 vehicle & plate detection...</p>
+        <div class="progress mx-auto" style="width: 320px; height: 6px; background: rgba(255,255,255,0.1);">
+            <div class="progress-bar progress-bar-striped progress-bar-animated bg-info" style="width: 100%;"></div>
+        </div>
+    </div>
+
+    <!-- Results Section (Populated dynamically via JavaScript) -->
+    <div id="resultsSection" class="d-none">
+        <!-- Results Summary Bar -->
+        <div class="alert mb-4 border border-info border-opacity-25" style="background: rgba(0, 240, 255, 0.08); color: #E2E8F0;">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <div>
+                    <i class="fa-solid fa-circle-check text-info me-2 fa-lg"></i>
+                    <strong class="text-white">Recognition Complete:</strong>
+                    <span id="summaryText">Detected 1 vehicle and 1 license plate in 0.85s.</span>
+                </div>
+                <div class="btn-group btn-group-sm">
+                    <button class="btn btn-outline-info active" id="btnViewComparison">
+                        <i class="fa-solid fa-table-columns me-1"></i> Side-by-Side
+                    </button>
+                    <button class="btn btn-outline-info" id="btnViewAnnotated">
+                        <i class="fa-solid fa-image me-1"></i> Annotated
+                    </button>
+                    <button class="btn btn-outline-info" id="btnViewOriginal">
+                        <i class="fa-regular fa-image me-1"></i> Original
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-3">
+            <!-- Left: Main Visual Viewer -->
+            <div class="col-lg-8">
+                <div class="cyber-card">
+                    <div class="cyber-card-header">
+                        <h3 class="cyber-card-title">
+                            <i class="fa-solid fa-display"></i>
+                            <span id="visualViewerTitle">Side-by-Side Verification Display</span>
+                        </h3>
+                        <button class="btn btn-sm btn-outline-light" id="btnZoomViewer">
+                            <i class="fa-solid fa-expand me-1"></i> Enlarge
+                        </button>
+                    </div>
+
+                    <div class="text-center p-2 rounded" style="background:#0F172A; min-height:360px; display:flex; align-items:center; justify-content:center;">
+                        <img id="mainViewerImg" src="" alt="ANPR Result" class="img-fluid rounded border border-secondary border-opacity-25" style="max-height: 520px;">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right: Plates & Vehicle Details -->
+            <div class="col-lg-4">
+                <!-- Recognized Plate Details -->
+                <div class="cyber-card mb-3">
+                    <div class="cyber-card-header">
+                        <h3 class="cyber-card-title">
+                            <i class="fa-solid fa-id-card"></i>
+                            <span>Recognized Plate</span>
+                        </h3>
+                    </div>
+
+                    <div id="platesContainer">
+                        <!-- Filled by JS -->
+                    </div>
+                </div>
+
+                <!-- Vehicle Details -->
+                <div class="cyber-card">
+                    <div class="cyber-card-header">
+                        <h3 class="cyber-card-title">
+                            <i class="fa-solid fa-car-side"></i>
+                            <span>Vehicle Intelligence</span>
+                        </h3>
+                    </div>
+                    <div id="vehiclesContainer">
+                        <!-- Filled by JS -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    let selectedFile = null;
+    let selectedSample = null;
+    let resultData = null;
+
+    const dropzone = document.getElementById('dropzone');
+    const imageInput = document.getElementById('imageInput');
+    const selectedFileName = document.getElementById('selectedFileName');
+    const confSlider = document.getElementById('confSlider');
+    const confVal = document.getElementById('confVal');
+    const btnProcess = document.getElementById('btnProcess');
+    const samplePills = document.querySelectorAll('.sample-pill');
+    const processingCard = document.getElementById('processingCard');
+    const resultsSection = document.getElementById('resultsSection');
+
+    // Slider value update
+    confSlider.addEventListener('input', (e) => {
+        confVal.textContent = `${e.target.value}%`;
+    });
+
+    // File selection
+    imageInput.addEventListener('change', (e) => {
+        if (e.target.files.length > 0) {
+            selectedFile = e.target.files[0];
+            selectedSample = null;
+            selectedFileName.textContent = `Selected: ${selectedFile.name} (${(selectedFile.size / 1024).toFixed(1)} KB)`;
+            samplePills.forEach(p => p.classList.remove('active'));
+        }
+    });
+
+    // Drag and drop handlers
+    dropzone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropzone.classList.add('dragover');
+    });
+    dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+    dropzone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropzone.classList.remove('dragover');
+        if (e.dataTransfer.files.length > 0) {
+            selectedFile = e.dataTransfer.files[0];
+            selectedSample = null;
+            selectedFileName.textContent = `Selected: ${selectedFile.name} (${(selectedFile.size / 1024).toFixed(1)} KB)`;
+            samplePills.forEach(p => p.classList.remove('active'));
+        }
+    });
+
+    // Sample Picker
+    samplePills.forEach(pill => {
+        pill.addEventListener('click', () => {
+            samplePills.forEach(p => p.classList.remove('active'));
+            pill.classList.add('active');
+            selectedSample = pill.getAttribute('data-sample');
+            selectedFile = null;
+            imageInput.value = '';
+            selectedFileName.textContent = `Sample: ${selectedSample}`;
+        });
+    });
+
+    // Process button click
+    btnProcess.addEventListener('click', () => {
+        if (!selectedFile && !selectedSample) {
+            alert("Please select or upload a vehicle image first.");
+            return;
+        }
+
+        const formData = new FormData();
+        if (selectedFile) {
+            formData.append('file', selectedFile);
+        } else if (selectedSample) {
+            formData.append('sample', selectedSample);
+        }
+
+        formData.append('confidence', (confSlider.value / 100).toFixed(2));
+        formData.append('method', document.getElementById('detectionMethod').value);
+
+        // Show spinner
+        processingCard.classList.remove('d-none');
+        resultsSection.classList.add('d-none');
+        btnProcess.disabled = true;
+
+        fetch('/api/detect/image', {
+            method: 'POST',
+            body: formData
+        })
+        .then(res => res.json())
+        .then(data => {
+            processingCard.classList.add('d-none');
+            btnProcess.disabled = false;
+
+            if (data.success) {
+                resultData = data;
+                displayResults(data);
+            } else {
+                alert(`Detection Error: ${data.error || 'Unknown failure'}`);
+            }
+        })
+        .catch(err => {
+            processingCard.classList.add('d-none');
+            btnProcess.disabled = false;
+            console.error(err);
+            alert("Network or inference error occurred.");
+        });
+    });
+
+    function displayResults(data) {
+        resultsSection.classList.remove('d-none');
+
+        // Update Summary
+        document.getElementById('summaryText').textContent = 
+            `Identified ${data.vehicles_count} vehicle(s) and ${data.plates_count} license plate(s) in ${data.elapsed_time}s.`;
+
+        // Set Main Image View (Comparison by default)
+        const mainImg = document.getElementById('mainViewerImg');
+        mainImg.src = data.comparison_image || data.annotated_image;
+
+        // Render Plates
+        const platesContainer = document.getElementById('platesContainer');
+        platesContainer.innerHTML = '';
+
+        if (data.detections && data.detections.length > 0) {
+            data.detections.forEach((d, idx) => {
+                const confPercent = (d.confidence * 100).toFixed(1);
+                const cropHtml = d.crop_path ? 
+                    `<img src="/${d.crop_path}" class="rounded border border-secondary w-100 mb-3" style="max-height:80px; object-fit:contain; background:#0B132B;" onclick="viewImageModal('/${d.crop_path}', '${d.plate_number}')">` : '';
+
+                const cardHtml = `
+                    <div class="p-3 rounded mb-3" style="background:#141C33; border:1px solid #2A3B5C;">
+                        ${cropHtml}
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="plate-badge fs-5">${d.plate_number}</span>
+                            <button class="btn btn-sm btn-outline-info py-0 px-2" onclick="navigator.clipboard.writeText('${d.plate_number}'); alert('Copied plate ${d.plate_number} to clipboard!');">
+                                <i class="fa-regular fa-copy"></i>
+                            </button>
+                        </div>
+                        <div class="small text-secondary mb-1">
+                            <i class="fa-solid fa-location-dot text-info me-1"></i>
+                            <strong>${d.state_name}</strong> (${d.state_code})
+                        </div>
+                        <div class="d-flex justify-content-between small text-muted mb-2">
+                            <span>Format:</span>
+                            <span class="text-white">${d.format_type}</span>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center small">
+                            <span class="text-muted">OCR Confidence:</span>
+                            <span class="badge ${confPercent >= 80 ? 'bg-success' : 'bg-warning'} text-white">${confPercent}%</span>
+                        </div>
+                    </div>
+                `;
+                platesContainer.innerHTML += cardHtml;
+            });
+        } else {
+            platesContainer.innerHTML = `
+                <div class="text-center py-4 text-muted">
+                    <i class="fa-solid fa-triangle-exclamation fa-2x mb-2 text-warning"></i>
+                    <p class="small mb-0">No license plate recognized. Try adjusting the confidence slider or switching to OpenCV mode.</p>
+                </div>
+            `;
+        }
+
+        // Render Vehicles
+        const vehiclesContainer = document.getElementById('vehiclesContainer');
+        vehiclesContainer.innerHTML = '';
+        if (data.vehicles && data.vehicles.length > 0) {
+            data.vehicles.forEach(v => {
+                const vconf = (v.confidence * 100).toFixed(1);
+                vehiclesContainer.innerHTML += `
+                    <div class="p-2 px-3 rounded mb-2 d-flex justify-content-between align-items-center" style="background:#141C33; border:1px solid #2A3B5C;">
+                        <div>
+                            <span class="vehicle-badge badge-car me-2"><i class="fa-solid fa-car"></i> ${v.class_name}</span>
+                            <small class="text-muted">Box: [${v.bbox.join(', ')}]</small>
+                        </div>
+                        <span class="text-info small fw-bold">${vconf}%</span>
+                    </div>
+                `;
+            });
+        } else {
+            vehiclesContainer.innerHTML = `<p class="text-muted small">No distinct vehicle bounding boxes detected.</p>`;
+        }
+
+        // Scroll to results
+        resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    // View toggles
+    document.getElementById('btnViewComparison').addEventListener('click', function() {
+        if (!resultData) return;
+        document.getElementById('mainViewerImg').src = resultData.comparison_image;
+        document.getElementById('visualViewerTitle').textContent = "Side-by-Side Verification Display";
+        updateActiveBtn(this);
+    });
+
+    document.getElementById('btnViewAnnotated').addEventListener('click', function() {
+        if (!resultData) return;
+        document.getElementById('mainViewerImg').src = resultData.annotated_image;
+        document.getElementById('visualViewerTitle').textContent = "Annotated Detection Output (HUD Bounding Boxes)";
+        updateActiveBtn(this);
+    });
+
+    document.getElementById('btnViewOriginal').addEventListener('click', function() {
+        if (!resultData) return;
+        document.getElementById('mainViewerImg').src = resultData.original_image;
+        document.getElementById('visualViewerTitle').textContent = "Original Input Image";
+        updateActiveBtn(this);
+    });
+
+    function updateActiveBtn(activeBtn) {
+        document.querySelectorAll('.btn-group button').forEach(b => b.classList.remove('active'));
+        activeBtn.classList.add('active');
+    }
+
+    // Enlarge modal
+    document.getElementById('btnZoomViewer').addEventListener('click', () => {
+        const curSrc = document.getElementById('mainViewerImg').src;
+        if (curSrc) viewImageModal(curSrc, 'Inspection View');
+    });
+});
+</script>
+{% endblock %}
