@@ -68,13 +68,13 @@ class PlateOCREngine:
         prep = preprocess_plate_for_ocr(plate_crop)
         candidates: List[Dict[str, Any]] = []
 
-        # List of image representations to test
+        import gc
+
+        # Test highest-quality image representations first
         images_to_try = [
             ("contrast", prep.get("contrast")),
-            ("deskewed", prep.get("deskewed")),
             ("thresh_otsu", prep.get("thresh_otsu")),
-            ("thresh_adapt", prep.get("thresh_adapt")),
-            ("thresh_inv", prep.get("thresh_inv"))
+            ("deskewed", prep.get("deskewed"))
         ]
 
         for stage_name, img_variant in images_to_try:
@@ -82,12 +82,14 @@ class PlateOCREngine:
                 continue
 
             try:
-                # Run EasyOCR
+                # Run EasyOCR with bounded canvas size to prevent PyTorch RAM spikes
                 results = self.reader.readtext(
                     img_variant,
                     detail=1,
                     allowlist=allowlist,
-                    paragraph=False
+                    paragraph=False,
+                    canvas_size=640,
+                    mag_ratio=1.0
                 )
 
                 if results:
@@ -111,8 +113,13 @@ class PlateOCREngine:
                             "format_type": val_meta["format_type"],
                             "score": score
                         })
+                        # Early exit if valid Indian plate found with good confidence
+                        if val_meta["is_valid"] and avg_conf >= 0.60:
+                            break
             except Exception as e:
                 pass
+
+        gc.collect()
 
         # Select candidate with best score
         if candidates:

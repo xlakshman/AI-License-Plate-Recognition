@@ -6,6 +6,15 @@ Flask Application Server for B.Tech CSE (AI & ML) College Project and Viva Exami
 
 import os
 import sys
+
+# Configure environment limits BEFORE importing heavy libraries
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+os.environ["YOLO_VERBOSE"] = "False"
+
 import time
 import cv2
 import numpy as np
@@ -20,10 +29,6 @@ PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from detection.vehicle_detector import VehicleDetector
-from detection.plate_detector import PlateDetector
-from detection.ocr_engine import PlateOCREngine
-from detection.video_processor import VideoProcessor
 from database.db import (
     init_db, insert_detection, get_recent_detections, get_all_detections,
     count_detections, delete_detection, clear_all_detections, get_statistics,
@@ -51,13 +56,34 @@ os.makedirs(os.path.join(app.config["RESULTS_FOLDER"], "videos"), exist_ok=True)
 # Initialize Database
 init_db()
 
-# Lazy-loaded or preloaded AI Engine singletons
-print("[System] Loading AI Detection & OCR Models...")
-vehicle_detector = VehicleDetector()
-plate_detector = PlateDetector()
-ocr_engine = PlateOCREngine()
-video_processor = VideoProcessor(vehicle_detector, plate_detector, ocr_engine)
-print("[System] AI Engine Ready.")
+# Lazy-loaded AI Engine singletons (loaded on first request to stay within 512MB free-tier RAM)
+_vehicle_detector = None
+_plate_detector = None
+_ocr_engine = None
+_video_processor = None
+
+def get_ai_engine():
+    """Lazy-load AI models only when first inference request arrives (preserves RAM on 512MB hosts)."""
+    global _vehicle_detector, _plate_detector, _ocr_engine, _video_processor
+    if _vehicle_detector is None:
+        print("[System] Lazy-loading AI Detection & OCR Models...")
+        import gc
+        import torch
+        torch.set_num_threads(1)
+        torch.set_grad_enabled(False)
+
+        from detection.vehicle_detector import VehicleDetector
+        from detection.plate_detector import PlateDetector
+        from detection.ocr_engine import PlateOCREngine
+        from detection.video_processor import VideoProcessor
+
+        _vehicle_detector = VehicleDetector()
+        _plate_detector = PlateDetector()
+        _ocr_engine = PlateOCREngine()
+        _video_processor = VideoProcessor(_vehicle_detector, _plate_detector, _ocr_engine)
+        gc.collect()
+        print("[System] AI Engine Ready and memory optimized.")
+    return _vehicle_detector, _plate_detector, _ocr_engine, _video_processor
 
 
 # ---------------------------------------------------------
@@ -171,6 +197,9 @@ def api_detect_image():
     conf_thresh = float(request.form.get("confidence", 0.25))
     method = request.form.get("method", "auto")
 
+    # Lazy-load AI models on first request
+    vehicle_detector, plate_detector, ocr_engine, video_processor = get_ai_engine()
+
     # 1. License Plate Detection
     plate_detections = plate_detector.detect_plates(img, method=method, conf_threshold=conf_thresh)
     plate_boxes = [p["bbox"] for p in plate_detections]
@@ -274,6 +303,7 @@ def api_detect_video():
     frame_skip = int(request.form.get("frame_skip", 3))
 
     try:
+        _, _, _, video_processor = get_ai_engine()
         proc_result = video_processor.process_video(
             video_path=video_path,
             output_dir=os.path.join(app.config["RESULTS_FOLDER"], "videos"),
